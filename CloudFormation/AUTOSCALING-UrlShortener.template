@@ -1,0 +1,130 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Url Shortener Demo Auto Scaling Group",
+    "Parameters": {
+        "Ami": {
+            "Default": "ami-761ebc01",
+            "Description": "AMI",
+            "Type": "String"
+        },
+        "Instance": {
+            "Default": "c3.large",
+            "Description": "Instance Type (c3.large, c3.xlarge, c3.2xlarge)",
+            "Type": "String",
+            "AllowedValues": [ "c3.large", "c3.xlarge", "c3.2xlarge" ]
+        },
+        "NumberOfInstances": {
+            "Default": "1",
+            "Description": "Number Of Instances",
+            "Type": "String"
+        },
+        "Environment": {
+            "Description": "Select Environemt (test/production)",
+            "Type": "String",
+            "AllowedValues": [ "test", "production" ]
+        },
+        "Version": {
+            "Description": "The version number of the deployed Url Shortener",
+            "Type": "String"
+        },
+        "ELBs": {
+            "Description": "ELBs (e.g. urlshortenerdemo)",
+            "Type": "CommaDelimitedList"
+        }
+    },
+    "Resources": {
+        "ForecasterGroup": {
+            "Type": "AWS::AutoScaling::AutoScalingGroup",
+            "Properties": {
+                "AvailabilityZones": { "Fn::GetAZs" : { "Ref" : "AWS::Region" } },
+                "LaunchConfigurationName": { "Ref": "UrlShortenerDemoLaunchConfig" },
+                "DesiredCapacity": { "Ref": "NumberOfInstances" },
+                "MinSize": "0",
+                "MaxSize": "25",
+                "HealthCheckGracePeriod": "1200",
+                "HealthCheckType": "EC2",
+                "LoadBalancerNames": { "Ref": "ELBs" },
+                "Tags": [
+                    {
+                        "Key": "Environment",
+                        "Value": {
+                            "Ref": "Environment"
+                        },
+                        "PropagateAtLaunch": "true"
+                    },
+                    {
+                        "Key": "Function",
+                        "Value": "UrlShortenerDemo",
+                        "PropagateAtLaunch": "true"
+                    }
+                ]
+            },
+            "UpdatePolicy": {
+                "AutoScalingRollingUpdate": {
+                    "MaxBatchSize": 5,
+                    "MinInstancesInService": { "Ref": "NumberOfInstances" },
+                    "PauseTime": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "PT10M0S"
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+
+        "UrlShortenerDemoLaunchConfig": {
+            "Type": "AWS::AutoScaling::LaunchConfiguration",
+            "Properties": {
+                "ImageId": { "Ref": "Ami" },
+                "SecurityGroups": [ "UrlShortenerDemo", "RDP" ],
+                "InstanceType": { "Ref": "Instance" },
+                "IamInstanceProfile": "arn:aws:iam::700582653194:instance-profile/UrlShortenerDemo_EUWest1_Role",
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "\r\n",
+                            [
+                                "<script>",
+                                "CALL rmdir /S /Q C:\\QueueIT\\InstallFiles\\UrlShortenerDemo",
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "CALL \"C:\\QueueIT\\DownloadAndExtract.bat\"",
+                                            " ",
+                                            "UrlShortenerDemo",
+                                            " ",
+                                            { "Ref": "Environment" },
+                                            " ",
+                                            "UrlShortenerDemo/binaries/",
+                                            { "Ref": "Version" },
+                                            ".zip",
+                                            " > C:\\QueueIT\\LogDownloadUrlShortenerDemoBinaries.txt 2>&1"
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "CALL \"C:\\QueueIT\\InstallFiles\\UrlShortenerDemo\\Install.bat\"",
+                                            " ",
+                                            { "Ref": "AWS::Region" },
+                                            " ",
+                                            { "Ref": "Environment" },
+                                            " > C:\\QueueIT\\LogInstallUrlShortenerDemoService.txt 2>&1"
+                                        ]
+                                    ]
+                                },
+                                "</script>"
+                            ]
+                        ]
+                    }
+                }
+            }
+        }
+    }
+}
